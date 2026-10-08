@@ -1,0 +1,43 @@
+body {
+  font-family: Arial, sans-serif;
+  background: #f4f4f4;
+  margin: 0;
+}
+
+.card {
+  max-width: 400px;
+  margin: 80px auto;
+  padding: 30px;
+  background: white;
+  border-radius: 10px;
+  text-align: center;
+}
+
+.button {
+  display: inline-block;
+  padding: 10px 20px;
+  background: #232d4b;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 16px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.badge {
+  background: #e57200;
+  color: white;
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.small {
+  color: gray;
+  font-size: 14px;
+}
+
+.error {
+  color: #b00020;
+}
