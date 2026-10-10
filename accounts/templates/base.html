@@ -8,12 +8,27 @@
   <link rel="stylesheet" href="{% static 'style.css' %}">
 </head>
 <body>
+  {% block body %}
+  {% if user.is_authenticated %}
+  <div class="navbar">
+    <a class="logo" href="{% url 'home' %}">Wi-Fi Ratings</a>
+    <a href="{% url 'home' %}">Home</a>
+    <a href="{% url 'profile' %}">Profile</a>
+    <span class="badge">{{ user.get_role_display }}</span>
+    <form method="post" action="{% url 'account_logout' %}">
+      {% csrf_token %}
+      <button type="submit">Log out</button>
+    </form>
+  </div>
+  {% endif %}
+
   <div class="card">
     {% for message in messages %}
-      <p class="error">{{ message }}</p>
+      <p class="{{ message.tags }}">{{ message }}</p>
     {% endfor %}
 
     {% block content %}{% endblock %}
   </div>
+  {% endblock %}
 </body>
 </html>

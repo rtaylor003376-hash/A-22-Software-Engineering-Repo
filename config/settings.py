@@ -155,7 +155,7 @@ SOCIALACCOUNT_PROVIDERS = {
 }
 
 LOGIN_URL = 'login'
-LOGIN_REDIRECT_URL = 'profile'
+LOGIN_REDIRECT_URL = 'home'
 ACCOUNT_LOGOUT_REDIRECT_URL = 'login'
 
 # only Google login, no username/password signup

@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block body %}
+<div class="home">
+  <form method="get" action="{% url 'home' %}">
+    <div class="home-top">
+      <div class="home-header">
+        <div class="home-title">
+          <p class="small">Hey {{ first_name }}</p>
+          <h1>Coffee shops near you</h1>
+        </div>
+        {% if is_moderator %}
+          <span class="role-tag role-admin">Moderator</span>
+        {% else %}
+          <span class="role-tag">Student</span>
+        {% endif %}
+        <a class="avatar" href="{% url 'profile' %}" aria-label="Profile">{{ initials }}</a>
+      </div>
+
+      <input class="search" type="search" name="q" value="{{ search }}"
+             placeholder="Search coffee shops" aria-label="Search coffee shops">
+
+      <div class="chips">
+        {% for key, label in filters %}
+          <label class="chip">
+            <input type="checkbox" name="{{ key }}" value="1" onchange="this.form.submit()"
+                   {% if key in active %}checked{% endif %}>
+            <span>{{ label }}</span>
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="home-controls">
+      <div class="toggle">
+        <label>
+          <input type="radio" name="view" value="list" onchange="this.form.submit()"
+                 {% if view != "map" %}checked{% endif %}>
+          <span>List</span>
+        </label>
+        <label>
+          <input type="radio" name="view" value="map" onchange="this.form.submit()"
+                 {% if view == "map" %}checked{% endif %}>
+          <span>Map</span>
+        </label>
+      </div>
+
+      <select name="time" aria-label="Time of day" onchange="this.form.submit()">
+        {% for value, label in times %}
+          <option value="{{ value }}" {% if value == time %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </form>
+
+  <div class="home-list">
+    {% for message in messages %}
+      <p class="{{ message.tags }}">{{ message }}</p>
+    {% endfor %}
+
+    {% if view == "map" %}
+      <div class="map-placeholder">
+        <p>Map view coming soon</p>
+      </div>
+    {% else %}
+      {% for shop in shops %}
+        <div class="shop-card">
+          <div class="shop-row">
+            <h2>{{ shop.name }}</h2>
+            <span class="small">{{ shop.distance }} mi</span>
+          </div>
+          <div class="shop-speeds">
+            <span>&darr; <b>{{ shop.download }}</b> Mbps</span>
+            <span>&uarr; <b>{{ shop.upload }}</b> Mbps</span>
+            <span class="speed-tag speed-{{ shop.label|lower }}">{{ shop.label }}</span>
+          </div>
+          <div class="shop-tags">
+            <span>Seating: {{ shop.seating }}</span>
+            <span>Outlets: {{ shop.outlets }}</span>
+            <span>{{ shop.noise }}</span>
+          </div>
+          <p class="small">{{ shop.ratings }} ratings · last test {{ shop.last_test }} · {{ shop.hours }}</p>
+        </div>
+      {% empty %}
+        <p class="small empty">No coffee shops match. Try turning off a filter.</p>
+      {% endfor %}
+    {% endif %}
+  </div>
+
+  <div class="home-bottom">
+    <button class="speed-button" type="button">Run a speed test here</button>
+    <div class="bottom-nav">
+      <a class="current" href="{% url 'home' %}">Home</a>
+      <span>Speed test</span>
+      <a href="{% url 'profile' %}">Profile</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

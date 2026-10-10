@@ -8,5 +8,5 @@ class User(AbstractUser):
         ("moderator", "Moderator"),
     ]
 
-    # everyone starts as a student, change to moderator in /admin
+    # everyone starts as a student and we'll change to moderator in admin
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="student")
