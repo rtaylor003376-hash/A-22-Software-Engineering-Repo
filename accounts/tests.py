@@ -191,48 +191,54 @@ class ProfileViewTests(TestCase):
         self.assertEqual(response.context["role"], "Student")
 
 
-class KnownBugRegressionTests(TestCase):
+class BugFixRegressionTests(TestCase):
     """
-    Documents bugs found during QA review. These are NOT fixed here per
-    team process (QA reports bugs, does not patch teammates' code) -- see
-    TESTING.md "Known Issues" for what to tell Sean. These tests record
-    the current (buggy) behavior so the issue has a reproducible test.
+    Regression tests for two bugs found during QA review and fixed on
+    2026-10-10. See TESTING.md "Known Issues (fixed)" for details on each
+    bug and the fix. These tests pin down the fixed behavior so a future
+    change can't silently reintroduce either bug.
     """
 
-    def test_shops_global_is_mutated_in_place_by_request_handling(self):
+    def test_shops_global_is_not_mutated_by_request_handling(self):
         """
-        BUG: accounts/views.py home() mutates the shared module-level SHOPS
-        list directly (shop["download"] = ...) instead of building a copy.
-        This test proves the shared dicts retain the last request's values,
-        which is a data-race risk if requests interleave (e.g. Django's
-        threaded dev server, or a multi-threaded gunicorn config) -- one
-        user's request could read another user's in-progress values.
+        Was: accounts/views.py home() mutated the shared module-level
+        SHOPS list directly (shop["download"] = ...) instead of building
+        a copy, which was a data-race risk under concurrent requests --
+        one user's request could leak into another's.
+        Fix: the view now copies each shop dict (dict(original)) before
+        writing computed fields onto it, so SHOPS itself is never changed.
         """
-        grit = next(s for s in SHOPS if s["name"] == "Grit (Corner)")
+        grit_before = next(s for s in SHOPS if s["name"] == "Grit (Corner)")
+        snapshot = dict(grit_before)
 
         user = User.objects.create_user(username="viswa", password="x")
         self.client.force_login(user)
 
         self.client.get(reverse("home"), {"time": "morning"})
-        self.assertEqual(grit["download"], 58, "SHOPS was mutated by the request")
-
         self.client.get(reverse("home"), {"time": "evening"})
-        self.assertEqual(
-            grit["download"],
-            44,
-            "SHOPS mutated again by a later request -- confirms shared "
-            "global state is not request-isolated",
-        )
 
-    def test_home_page_has_no_logout_link(self):
+        self.assertEqual(grit_before, snapshot, "SHOPS should be untouched by requests")
+        self.assertNotIn("download", grit_before, "SHOPS entries should have no computed fields")
+
+    def test_home_page_has_a_logout_control(self):
         """
-        BUG: home.html overrides base.html's entire `body` block, so it
-        never inherits the shared navbar (which contains the Log out
-        form). The home page is the post-login landing page, so there is
-        currently no way to log out from it without first clicking
-        through to Profile.
+        Was: home.html overrode base.html's entire `body` block, so it
+        never inherited the shared navbar's Log out form. Home is the
+        post-login landing page, so there was no way to log out from it
+        without first clicking through to Profile.
+        Fix: added a Log out form directly to home.html's bottom nav.
         """
         user = User.objects.create_user(username="viswa", password="x")
         self.client.force_login(user)
         response = self.client.get(reverse("home"))
-        self.assertNotContains(response, "account_logout")
+        self.assertContains(response, f'action="{reverse("account_logout")}"')
+        self.assertContains(response, "Log out")
+
+    def test_logout_from_home_page_actually_logs_out(self):
+        user = User.objects.create_user(username="viswa", password="x")
+        self.client.force_login(user)
+        self.client.post(reverse("account_logout"))
+        response = self.client.get(reverse("home"))
+        self.assertRedirects(
+            response, f"{reverse('login')}?next={reverse('home')}", fetch_redirect_response=False
+        )

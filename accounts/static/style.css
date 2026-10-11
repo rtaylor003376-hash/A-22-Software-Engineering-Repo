@@ -349,6 +349,20 @@ body {
   text-decoration: none;
 }
 
+.bottom-nav form {
+  margin: 0;
+}
+
+.bottom-nav button {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  color: gray;
+  font-size: 14px;
+  cursor: pointer;
+}
+
 .bottom-nav .current {
   color: #232d4b;
   font-weight: bold;

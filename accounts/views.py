@@ -118,7 +118,12 @@ def home(request):
             active.append(key)
 
     shops = []
-    for shop in SHOPS:
+    for original in SHOPS:
+        # Copy instead of mutating the shared SHOPS dicts in place -- SHOPS
+        # is module-level state shared by every request in the process, so
+        # writing into it directly let one request's values leak into
+        # another's under concurrent access.
+        shop = dict(original)
         shop["download"] = shop["speeds"][time][0]
         shop["upload"] = shop["speeds"][time][1]
         shop["label"] = speed_label(shop["download"])

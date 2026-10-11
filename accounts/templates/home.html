@@ -93,6 +93,10 @@
       <a class="current" href="{% url 'home' %}">Home</a>
       <span>Speed test</span>
       <a href="{% url 'profile' %}">Profile</a>
+      <form method="post" action="{% url 'account_logout' %}">
+        {% csrf_token %}
+        <button type="submit">Log out</button>
+      </form>
     </div>
   </div>
 </div>
