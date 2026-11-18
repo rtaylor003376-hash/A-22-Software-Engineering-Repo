@@ -70,16 +70,16 @@
             <span class="small">{{ shop.distance }} mi</span>
           </div>
           <div class="shop-speeds">
-            <span>&darr; <b>{{ shop.download }}</b> Mbps</span>
-            <span>&uarr; <b>{{ shop.upload }}</b> Mbps</span>
-            <span class="speed-tag speed-{{ shop.label|lower }}">{{ shop.label }}</span>
+            <span>&darr; <b>{{ shop.download|floatformat:0|default:"–" }}</b> Mbps</span>
+            <span>&uarr; <b>{{ shop.upload|floatformat:0|default:"–" }}</b> Mbps</span>
+            <span class="speed-tag speed-{{ shop.label|lower|cut:" " }}">{{ shop.label }}</span>
           </div>
           <div class="shop-tags">
             <span>Seating: {{ shop.seating }}</span>
             <span>Outlets: {{ shop.outlets }}</span>
             <span>{{ shop.noise }}</span>
           </div>
-          <p class="small">{{ shop.ratings }} ratings · last test {{ shop.last_test }} · {{ shop.hours }}</p>
+          <p class="small">{{ shop.rating_count }} ratings · {% if shop.last_rating %}last test {{ shop.last_rating|timesince }} ago{% else %}no tests yet{% endif %} · {{ shop.hours }}</p>
         </div>
       {% empty %}
         <p class="small empty">No coffee shops match. Try turning off a filter.</p>
@@ -88,10 +88,10 @@
   </div>
 
   <div class="home-bottom">
-    <button class="speed-button" type="button">Run a speed test here</button>
+    <a class="speed-button" href="{% url 'rate' %}">Run a speed test here</a>
     <div class="bottom-nav">
       <a class="current" href="{% url 'home' %}">Home</a>
-      <span>Speed test</span>
+      <a href="{% url 'rate' %}">Speed test</a>
       <a href="{% url 'profile' %}">Profile</a>
       <form method="post" action="{% url 'account_logout' %}">
         {% csrf_token %}

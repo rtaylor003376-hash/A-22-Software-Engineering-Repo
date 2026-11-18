@@ -1,80 +1,13 @@
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import redirect, render
+from zoneinfo import ZoneInfo
 
-SHOPS = [
-    {
-        "name": "Bodo's (Corner)",
-        "distance": 0.1,
-        "speeds": {
-            "now": [19, 5],
-            "morning": [14, 4],
-            "afternoon": [19, 5],
-            "evening": [22, 6],
-        },
-        "seating": "plenty",
-        "outlets": "few",
-        "noise": "Noise: loud",
-        "quiet": False,
-        "ratings": 12,
-        "last_test": "5 hrs ago",
-        "open": False,
-        "hours": "closed · opens 7 AM",
-    },
-    {
-        "name": "Grit (Corner)",
-        "distance": 0.2,
-        "speeds": {
-            "now": [52, 14],
-            "morning": [58, 16],
-            "afternoon": [52, 14],
-            "evening": [44, 12],
-        },
-        "seating": "plenty",
-        "outlets": "some",
-        "noise": "Quiet upstairs",
-        "quiet": True,
-        "ratings": 38,
-        "last_test": "20 min ago",
-        "open": True,
-        "hours": "open till 7 PM",
-    },
-    {
-        "name": "Starbucks (Corner)",
-        "distance": 0.2,
-        "speeds": {
-            "now": [31, 9],
-            "morning": [36, 10],
-            "afternoon": [31, 9],
-            "evening": [27, 8],
-        },
-        "seating": "limited",
-        "outlets": "few",
-        "noise": "Quiet upstairs",
-        "quiet": True,
-        "ratings": 54,
-        "last_test": "1 hr ago",
-        "open": True,
-        "hours": "open till 9 PM",
-    },
-    {
-        "name": "1515",
-        "distance": 0.3,
-        "speeds": {
-            "now": [64, 18],
-            "morning": [71, 20],
-            "afternoon": [64, 18],
-            "evening": [49, 13],
-        },
-        "seating": "some",
-        "outlets": "plenty",
-        "noise": "Noise: medium",
-        "quiet": False,
-        "ratings": 21,
-        "last_test": "3 hrs ago",
-        "open": True,
-        "hours": "open till 6 PM",
-    },
-]
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.db.models import Avg, Count, Max, Q
+from django.shortcuts import redirect, render
+from django.utils import timezone
+
+from .forms import RatingForm
+from .models import Shop
 
 FILTERS = [
     ["fast", "Fast Wi-Fi"],
@@ -92,7 +25,18 @@ TIMES = [
 ]
 
 
+def current_time_of_day():
+    hour = timezone.localtime(timezone=ZoneInfo("America/New_York")).hour
+    if hour < 12:
+        return "morning"
+    if hour < 17:
+        return "afternoon"
+    return "evening"
+
+
 def speed_label(download):
+    if download is None:
+        return "No data"
     if download >= 50:
         return "Fast"
     if download >= 25:
@@ -117,28 +61,29 @@ def home(request):
         if request.GET.get(key) == "1":
             active.append(key)
 
-    shops = []
-    for original in SHOPS:
-        # Copy instead of mutating the shared SHOPS dicts in place -- SHOPS
-        # is module-level state shared by every request in the process, so
-        # writing into it directly let one request's values leak into
-        # another's under concurrent access.
-        shop = dict(original)
-        shop["download"] = shop["speeds"][time][0]
-        shop["upload"] = shop["speeds"][time][1]
-        shop["label"] = speed_label(shop["download"])
+    slot = current_time_of_day() if time == "now" else time
+    all_shops = Shop.objects.annotate(
+        download=Avg("ratings__download", filter=Q(ratings__time_of_day=slot)),
+        upload=Avg("ratings__upload", filter=Q(ratings__time_of_day=slot)),
+        rating_count=Count("ratings"),
+        last_rating=Max("ratings__created"),
+    )
 
-        if search not in shop["name"].lower():
+    shops = []
+    for shop in all_shops:
+        shop.label = speed_label(shop.download)
+
+        if search not in shop.name.lower():
             continue
-        if "fast" in active and shop["label"] != "Fast":
+        if "fast" in active and shop.label != "Fast":
             continue
-        if "outlets" in active and shop["outlets"] == "few":
+        if "outlets" in active and shop.outlets == "few":
             continue
-        if "seating" in active and shop["seating"] == "limited":
+        if "seating" in active and shop.seating == "limited":
             continue
-        if "quiet" in active and not shop["quiet"]:
+        if "quiet" in active and not shop.quiet:
             continue
-        if "open" in active and not shop["open"]:
+        if "open" in active and not shop.open:
             continue
         shops.append(shop)
 
@@ -171,3 +116,19 @@ def profile(request):
         "joined": request.user.date_joined,
     }
     return render(request, "profile.html", context)
+
+
+@login_required
+def rate(request):
+    if request.method == "POST":
+        form = RatingForm(request.POST)
+        if form.is_valid():
+            rating = form.save(commit=False)
+            rating.user = request.user
+            rating.time_of_day = current_time_of_day()
+            rating.save()
+            messages.success(request, f"Thanks! Your speed test for {rating.shop} was saved.")
+            return redirect("home")
+    else:
+        form = RatingForm()
+    return render(request, "rate.html", {"form": form})

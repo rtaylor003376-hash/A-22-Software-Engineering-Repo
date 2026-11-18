@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Run a speed test</h1>
+<p class="small">Run a test at <a href="https://fast.com" target="_blank" rel="noopener">fast.com</a>, then enter your results.</p>
+
+<form class="rate-form" method="post">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button class="button" type="submit">Submit</button>
+</form>
+{% endblock %}

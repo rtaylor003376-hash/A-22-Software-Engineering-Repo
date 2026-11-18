@@ -72,6 +72,10 @@ can silently come back. Sean was notified of both before the fix was made.
    snapshots a shop before two requests with different `time` values and
    asserts `SHOPS` is byte-for-byte unchanged afterward.
 
+   **Update (Sprint 6):** `SHOPS` was replaced by the `Shop` and `Rating`
+   database models, so there is no shared list left to mutate and this
+   test was removed.
+
 2. **No logout link on the home page.** `home.html` overrides
    `base.html`'s entire `{% block body %}`, so it never inherited the
    shared navbar (which has the Log out form). Since `/` is the

@@ -13,7 +13,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from .views import SHOPS, speed_label
+from .models import Rating, Shop
+from .views import speed_label
 
 User = get_user_model()
 
@@ -69,7 +70,7 @@ class HomeViewShopListTests(TestCase):
 
     def test_default_load_shows_all_shops(self):
         response = self.client.get(reverse("home"))
-        self.assertEqual(len(response.context["shops"]), len(SHOPS))
+        self.assertEqual(len(response.context["shops"]), Shop.objects.count())
         self.assertEqual(response.context["time"], "now")
         self.assertEqual(response.context["view"], "list")
 
@@ -78,26 +79,21 @@ class HomeViewShopListTests(TestCase):
         self.assertEqual(response.context["time"], "now")
 
     def test_time_of_day_changes_displayed_speeds(self):
-        # Values are copied out of the response immediately after each
-        # request. Holding onto the dict objects themselves across both
-        # requests would alias them together, since the view mutates the
-        # shared SHOPS list in place rather than copying it (see
-        # KnownBugRegressionTests.test_shops_global_is_mutated_in_place).
         morning = self.client.get(reverse("home"), {"time": "morning"})
         morning_download = next(
-            s["download"] for s in morning.context["shops"] if s["name"] == "Grit (Corner)"
+            s.download for s in morning.context["shops"] if s.name == "Grit (Corner)"
         )
         self.assertEqual(morning_download, 58)
 
         evening = self.client.get(reverse("home"), {"time": "evening"})
         evening_download = next(
-            s["download"] for s in evening.context["shops"] if s["name"] == "Grit (Corner)"
+            s.download for s in evening.context["shops"] if s.name == "Grit (Corner)"
         )
         self.assertEqual(evening_download, 44)
 
     def test_search_filters_by_name_case_insensitive(self):
         response = self.client.get(reverse("home"), {"q": "GRIT"})
-        names = [s["name"] for s in response.context["shops"]]
+        names = [s.name for s in response.context["shops"]]
         self.assertEqual(names, ["Grit (Corner)"])
 
     def test_search_with_no_match_returns_empty_list(self):
@@ -108,32 +104,32 @@ class HomeViewShopListTests(TestCase):
     def test_fast_filter_keeps_only_fast_shops_for_selected_time(self):
         response = self.client.get(reverse("home"), {"fast": "1"})
         for shop in response.context["shops"]:
-            self.assertEqual(speed_label(shop["download"]), "Fast")
+            self.assertEqual(speed_label(shop.download), "Fast")
 
     def test_outlets_filter_excludes_few_outlets(self):
         response = self.client.get(reverse("home"), {"outlets": "1"})
-        names = [s["name"] for s in response.context["shops"]]
+        names = [s.name for s in response.context["shops"]]
         self.assertNotIn("Bodo's (Corner)", names)
         self.assertNotIn("Starbucks (Corner)", names)
 
     def test_seating_filter_excludes_limited_seating(self):
         response = self.client.get(reverse("home"), {"seating": "1"})
-        names = [s["name"] for s in response.context["shops"]]
+        names = [s.name for s in response.context["shops"]]
         self.assertNotIn("Starbucks (Corner)", names)
 
     def test_quiet_filter_keeps_only_quiet_shops(self):
         response = self.client.get(reverse("home"), {"quiet": "1"})
-        names = {s["name"] for s in response.context["shops"]}
+        names = {s.name for s in response.context["shops"]}
         self.assertEqual(names, {"Grit (Corner)", "Starbucks (Corner)"})
 
     def test_open_filter_excludes_closed_shops(self):
         response = self.client.get(reverse("home"), {"open": "1"})
-        names = [s["name"] for s in response.context["shops"]]
+        names = [s.name for s in response.context["shops"]]
         self.assertNotIn("Bodo's (Corner)", names)
 
     def test_combined_filters_use_and_logic(self):
         response = self.client.get(reverse("home"), {"quiet": "1", "outlets": "1"})
-        names = {s["name"] for s in response.context["shops"]}
+        names = {s.name for s in response.context["shops"]}
         # quiet=1 allows Grit + Starbucks; outlets=1 then drops Starbucks (few outlets)
         self.assertEqual(names, {"Grit (Corner)"})
 
@@ -193,32 +189,12 @@ class ProfileViewTests(TestCase):
 
 class BugFixRegressionTests(TestCase):
     """
-    Regression tests for two bugs found during QA review and fixed on
+    Regression tests for bugs found during QA review and fixed on
     2026-10-10. See TESTING.md "Known Issues (fixed)" for details on each
     bug and the fix. These tests pin down the fixed behavior so a future
-    change can't silently reintroduce either bug.
+    change can't silently reintroduce it. The SHOPS mutation test was
+    removed when the hard-coded SHOPS list became the Shop/Rating models.
     """
-
-    def test_shops_global_is_not_mutated_by_request_handling(self):
-        """
-        Was: accounts/views.py home() mutated the shared module-level
-        SHOPS list directly (shop["download"] = ...) instead of building
-        a copy, which was a data-race risk under concurrent requests --
-        one user's request could leak into another's.
-        Fix: the view now copies each shop dict (dict(original)) before
-        writing computed fields onto it, so SHOPS itself is never changed.
-        """
-        grit_before = next(s for s in SHOPS if s["name"] == "Grit (Corner)")
-        snapshot = dict(grit_before)
-
-        user = User.objects.create_user(username="viswa", password="x")
-        self.client.force_login(user)
-
-        self.client.get(reverse("home"), {"time": "morning"})
-        self.client.get(reverse("home"), {"time": "evening"})
-
-        self.assertEqual(grit_before, snapshot, "SHOPS should be untouched by requests")
-        self.assertNotIn("download", grit_before, "SHOPS entries should have no computed fields")
 
     def test_home_page_has_a_logout_control(self):
         """
@@ -242,3 +218,65 @@ class BugFixRegressionTests(TestCase):
         self.assertRedirects(
             response, f"{reverse('login')}?next={reverse('home')}", fetch_redirect_response=False
         )
+
+
+class RatingSubmissionTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="viswa", password="x")
+        self.client.force_login(self.user)
+        self.grit = Shop.objects.get(name="Grit (Corner)")
+
+    def test_logged_out_rate_redirects_to_login(self):
+        self.client.logout()
+        response = self.client.get(reverse("rate"))
+        self.assertRedirects(
+            response, f"{reverse('login')}?next={reverse('rate')}", fetch_redirect_response=False
+        )
+
+    def test_rate_page_shows_form(self):
+        response = self.client.get(reverse("rate"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Grit (Corner)")
+
+    def test_valid_submission_saves_rating_for_user(self):
+        response = self.client.post(
+            reverse("rate"), {"shop": self.grit.id, "download": "80.5", "upload": "20"}
+        )
+        self.assertRedirects(response, reverse("home"))
+        rating = Rating.objects.get(user=self.user)
+        self.assertEqual(rating.shop, self.grit)
+        self.assertEqual(rating.download, 80.5)
+        self.assertIn(rating.time_of_day, ["morning", "afternoon", "evening"])
+
+    def test_submission_updates_home_page_average(self):
+        self.client.post(reverse("rate"), {"shop": self.grit.id, "download": "60", "upload": "16"})
+        rating = Rating.objects.get(user=self.user)
+        rating.time_of_day = "morning"
+        rating.save()
+        response = self.client.get(reverse("home"), {"time": "morning"})
+        grit = next(s for s in response.context["shops"] if s.name == "Grit (Corner)")
+        # starter morning rating is 58, new one is 60
+        self.assertEqual(grit.download, 59)
+
+    def test_negative_speed_is_rejected(self):
+        response = self.client.post(
+            reverse("rate"), {"shop": self.grit.id, "download": "-5", "upload": "10"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Rating.objects.filter(user=self.user).exists())
+
+    def test_missing_shop_is_rejected(self):
+        response = self.client.post(reverse("rate"), {"download": "50", "upload": "10"})
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Rating.objects.filter(user=self.user).exists())
+
+    def test_shop_with_no_ratings_shows_no_data(self):
+        Shop.objects.create(
+            name="New Cafe", distance=1.0, seating="some", outlets="some",
+            noise="Noise: medium", hours="open till 5 PM",
+        )
+        response = self.client.get(reverse("home"), {"q": "new cafe"})
+        shop = response.context["shops"][0]
+        self.assertIsNone(shop.download)
+        self.assertEqual(shop.label, "No data")
+        self.assertContains(response, "no tests yet")
